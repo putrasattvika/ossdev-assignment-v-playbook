@@ -1,0 +1,131 @@
+---
+
+- hosts: tyranosaurus
+  remote_user: sattvika
+  gather_facts: false   # don't gather facts yet in case if python 2 isn't installed yet
+  become: true
+
+  vars:
+    orangescrum_url: https://github.com/Orangescrum/orangescrum/archive/v1.6.1.zip
+    packages:
+      - apache2
+      - dpkg-dev
+      - git
+      - mysql-server
+      - php5.6
+      - php5.6-cli
+      - php5.6-curl
+      - php5.6-dev
+      - php5.6-gd
+      - php5.6-json
+      - php5.6-mbstring
+      - php5.6-mysql
+      - unzip
+
+  pre_tasks:
+    - name: install python2 for Ansible if not installed
+      raw: test -e /usr/bin/python || (apt -y update && apt install -y python-minimal)
+      register: pyinstall_output
+      changed_when: pyinstall_output.stdout != ""
+
+    - setup: # this run gather_facts
+  
+  tasks:
+    - name: add php5.6 PPA
+      apt_repository:
+        repo: 'ppa:ondrej/php'
+
+    - name: install packages
+      apt: name={{item}} state=installed update_cache=yes
+      with_items: 
+        - "{{ packages }}"
+
+    - name: enable apache2's rewrite mod
+      command: a2enmod rewrite
+
+    - name: enable apache2's headers mod
+      command: a2enmod headers
+
+    - name: download OrangeScrum v1.6.1
+      get_url:
+        url: "{{ orangescrum_url }}"
+        dest: /tmp/v1.6.1.zip
+        mode: 0444
+
+    - name: extract OrangeScrum
+      unarchive:
+        src: /tmp/v1.6.1.zip
+        dest: /tmp/
+        remote_src: yes
+
+    - name: move OrangeScrum to /var/www/html/orangescrum
+      shell: mv /tmp/orangescrum-1.6.1 /var/www/html/orangescrum
+
+    - name: create OrangeScrum database
+      shell: mysql -e 'CREATE DATABASE orangescrum CHARACTER SET utf8 COLLATE utf8_general_ci;'
+
+    - name: create OrangeScrum DB user
+      shell: mysql -e "CREATE USER 'orangescrum'@'localhost' IDENTIFIED BY 'orangescrum';"
+    
+    - name: grant privileges for OrangeScrum DB user
+      shell: mysql -e "GRANT ALL ON orangescrum.* TO 'orangescrum'@'localhost'; FLUSH PRIVILEGES;";
+
+    - name: turn off MySQL strict mode
+      shell: mysql -e "set global sql_mode='';"
+
+    - name: init OrangeScrum database
+      shell: mysql -uorangescrum -porangescrum -D orangescrum < database.sql
+      args:
+        chdir: /var/www/html/orangescrum/
+
+    - name: config OrangeScrum database config (login)
+      lineinfile:
+        path: /var/www/html/orangescrum/app/Config/database.php
+        regexp: "'login'.*$"
+        line: "\t\t'login' => 'orangescrum',"
+
+    - name: config OrangeScrum database config (password)
+      lineinfile:
+        path: /var/www/html/orangescrum/app/Config/database.php
+        regexp: "'password'.*$"
+        line: "\t\t'password' => 'orangescrum',"
+
+    - name: config OrangeScrum subfolder
+      lineinfile:
+        path: /var/www/html/orangescrum/app/Config/constants.php
+        regexp: define\('SUB_FOLDER'.*$
+        line: define('SUB_FOLDER', '/');
+
+    - name: change OrangeScrum directory permission
+      shell: chmod -R 0777 app/Config app/tmp app/webroot
+      args:
+        chdir: /var/www/html/orangescrum/
+
+    - name: create apache2 config
+      template:
+        src: ../templates/orangescrum.conf.j2
+        dest: /etc/apache2/sites-available/orangescrum.conf
+        owner: root
+        group: root
+        mode: 0644
+
+    - name: enable apache2 config
+      file:
+        src: /etc/apache2/sites-available/orangescrum.conf
+        dest: /etc/apache2/sites-enabled/orangescrum.conf
+        owner: root
+        group: root
+        state: link
+
+    - name: modify apache2 port config
+      template:
+        src: ../templates/ports.conf.j2
+        dest: /etc/apache2/ports.conf
+        owner: root
+        group: root
+        mode: 0644
+
+    - name: restart apache2
+      service:
+        name: apache2
+        state: restarted
