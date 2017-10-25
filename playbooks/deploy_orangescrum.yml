@@ -71,7 +71,12 @@
       shell: mysql -e "GRANT ALL ON orangescrum.* TO 'orangescrum'@'localhost'; FLUSH PRIVILEGES;";
 
     - name: turn off MySQL strict mode
-      shell: mysql -e "set global sql_mode='';"
+      template:
+        src: ../templates/disable_strict_mode.cnf.j2
+        dest: /etc/mysql/conf.d/disable_strict_mode.cnf
+        owner: root
+        group: root
+        mode: 0644
 
     - name: init OrangeScrum database
       shell: mysql -uorangescrum -porangescrum -D orangescrum < database.sql
