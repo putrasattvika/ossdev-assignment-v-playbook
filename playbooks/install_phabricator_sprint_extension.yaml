@@ -1,0 +1,35 @@
+---
+
+- hosts: tyranosaurus
+  remote_user: sattvika
+  gather_facts: false   # don't gather facts yet in case if python 2 isn't installed yet
+  become: true
+
+  vars:
+    ext_git_url: https://github.com/wikimedia/phabricator-extensions-Sprint.git
+
+  pre_tasks:
+    - name: install python2 for Ansible if not installed
+      raw: test -e /usr/bin/python || (apt -y update && apt install -y python-minimal)
+      register: pyinstall_output
+      changed_when: pyinstall_output.stdout != ""
+
+    - setup: # this run gather_facts
+  
+  tasks:
+    - name: clone phabricator-sprint repository
+      git:
+        repo: "{{ ext_git_url }}"
+        dest: /var/www/html/phabricator/libext/sprint/
+        clone: yes
+
+    - name: enable Maniphest points
+      shell: "./bin/config set maniphest.points '{\"enabled\": true}'"
+      args:
+        chdir: /var/www/html/phabricator/
+
+    - name: config phabricator-sprint extension
+      shell: ./bin/config set load-libraries '{"sprint":"/var/www/html/phabricator/libext/sprint/src"}'
+      args:
+        chdir: /var/www/html/phabricator/
+
