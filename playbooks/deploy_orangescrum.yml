@@ -59,13 +59,13 @@
         remote_src: yes
 
     - name: move OrangeScrum to /var/www/html/orangescrum
-      shell: mv /tmp/orangescrum-1.6.1 /var/www/html/orangescrum
+      shell: rm -r /var/www/html/orangescrum && mv /tmp/orangescrum-1.6.1 /var/www/html/orangescrum
 
     - name: create OrangeScrum database
-      shell: mysql -e 'CREATE DATABASE orangescrum CHARACTER SET utf8 COLLATE utf8_general_ci;'
+      shell: mysql -e 'CREATE DATABASE IF NOT EXISTS orangescrum CHARACTER SET utf8 COLLATE utf8_general_ci;'
 
     - name: create OrangeScrum DB user
-      shell: mysql -e "CREATE USER 'orangescrum'@'localhost' IDENTIFIED BY 'orangescrum';"
+      shell: mysql -e "CREATE USER IF NOT EXISTS 'orangescrum'@'localhost' IDENTIFIED BY 'orangescrum';"
     
     - name: grant privileges for OrangeScrum DB user
       shell: mysql -e "GRANT ALL ON orangescrum.* TO 'orangescrum'@'localhost'; FLUSH PRIVILEGES;";
@@ -102,9 +102,15 @@
         line: define('SUB_FOLDER', '/');
 
     - name: change OrangeScrum directory permission
+      shell: chmod -R 0755 /var/www/html/orangescrum
+
+    - name: change OrangeScrum config, tmp, and webroot directory permission
       shell: chmod -R 0777 app/Config app/tmp app/webroot
       args:
         chdir: /var/www/html/orangescrum/
+
+    - name: change OrangeScrum constants.php permission
+      shell: chmod -R 0555 /var/www/html/orangescrum/app/Config/constants.php
 
     - name: create apache2 config
       template:
